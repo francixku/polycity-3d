@@ -283,16 +283,29 @@
       }
     });
 
-    // Wheel event for iframe mode (Framer may forward wheel events)
+    // Wheel + touch events for iframe mode
     if (isEmbedded) {
       // Hide scroll track in iframe mode — Framer controls the scroll
       scrollTrack.style.display = 'none';
-      // Also listen for direct wheel events to allow basic scrolling in iframe
-      let wheelAccum = 0;
+      let accumScroll = 0;
+      // Wheel events (desktop)
       window.addEventListener('wheel', (e) => {
         e.preventDefault();
-        wheelAccum += e.deltaY * 0.0003;
-        scrollProgress = Math.max(0, Math.min(1, wheelAccum));
+        accumScroll += e.deltaY * 0.0003;
+        scrollProgress = Math.max(0, Math.min(1, accumScroll));
+      }, { passive: false });
+      // Touch events (mobile)
+      let touchStartY = 0;
+      let touchAccumAtStart = 0;
+      window.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+        touchAccumAtStart = accumScroll;
+      }, { passive: true });
+      window.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const deltaY = touchStartY - e.touches[0].clientY;
+        accumScroll = touchAccumAtStart + deltaY * 0.0008;
+        scrollProgress = Math.max(0, Math.min(1, accumScroll));
       }, { passive: false });
     }
 
@@ -815,6 +828,10 @@
       setTimeout(() => {
         if (!document.getElementById('loading').classList.contains('hidden')) dismissLoading();
       }, 5000);
+      // Notify parent (Framer) that all 3D assets are loaded
+      if (isEmbedded) {
+        window.parent.postMessage({ type: 'polycity-ready' }, '*');
+      }
     });
 
     // ─── CHERRY BLOSSOM PETALS ───
@@ -1292,12 +1309,7 @@
       ps1Pass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
     });
 
-    // ─── NOTIFY PARENT (FRAMER) THAT SCENE IS READY ───
-    window.addEventListener('load', () => {
-      if (isEmbedded) {
-        window.parent.postMessage({ type: 'polycity-ready' }, '*');
-      }
-    });
+    // polycity-ready is now sent after buildCity() resolves (all GLBs loaded)
 
     console.log('PolyCity SCROLL scene initialized');
     console.log('Accepts scroll via: native scroll, postMessage({ type: "scroll", progress: 0-1 }), or wheel events');
